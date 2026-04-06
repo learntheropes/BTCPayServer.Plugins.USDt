@@ -72,18 +72,19 @@ public class GreenfieldTronUSDtLikeStoreController(
         if (!pluginConfiguration.TronUSDtLikeConfigurationItems.ContainsKey(paymentMethodId))
             return NotFound();
 
-        if (!TronUSDtAddressHelper.IsValid(request.Address))
-            return BadRequest(new { message = "Invalid Tron address." });
+        var invalid = request.Addresses.Where(a => !TronUSDtAddressHelper.IsValid(a)).ToArray();
+        if (invalid.Length > 0)
+            return BadRequest(new { message = "Invalid Tron address(es).", addresses = invalid });
 
-        var address = request.Address;
         var store = StoreData;
         var currentConfig = store.GetPaymentMethodConfig<TronUSDtPaymentMethodConfig>(paymentMethodId, handlers)
                             ?? new TronUSDtPaymentMethodConfig();
 
-        if (currentConfig.Addresses.Contains(address))
-            return BadRequest(new { message = "Address already exists." });
+        var duplicates = request.Addresses.Where(a => currentConfig.Addresses.Contains(a)).ToArray();
+        if (duplicates.Length > 0)
+            return BadRequest(new { message = "Address(es) already exist.", addresses = duplicates });
 
-        currentConfig.Addresses = [.. currentConfig.Addresses, address];
+        currentConfig.Addresses = [.. currentConfig.Addresses, .. request.Addresses];
         store.SetPaymentMethodConfig(handlers[paymentMethodId], currentConfig);
         return Ok();
     }

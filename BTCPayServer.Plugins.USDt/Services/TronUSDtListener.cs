@@ -49,6 +49,8 @@ public class TronUSDtListener(
 
     protected override string RateLimitNodeName => "Tron";
 
+    protected override bool UseExponentialRateLimitBackoff => true;
+
     protected override long CreateInitialLastBlockHeight(HexBigInteger latestBlockNumber)
     {
         return (long)latestBlockNumber.Value;
@@ -62,8 +64,11 @@ public class TronUSDtListener(
         IReadOnlyDictionary<string, InvoiceEntity> invoicesPerAddress,
         CancellationToken stoppingToken)
     {
+        var config = usdtPluginConfiguration.TronUSDtLikeConfigurationItems[paymentMethodId];
+        var contractAddressHex = TronUSDtAddressHelper.Base58ToHex(config.SmartContractAddress);
+
         var web3Client = tronUSDtRpcProvider.GetWeb3Client(paymentMethodId);
-        var transferEvent = web3Client.Eth.GetEvent<TransferEventDTO>();
+        var transferEvent = web3Client.Eth.GetEvent<TransferEventDTO>(contractAddressHex);
 
         List<EventLog<TransferEventDTO>>? changes;
         var tries = 0;
@@ -81,10 +86,8 @@ public class TronUSDtListener(
         if (changes == null)
             throw new InvalidOperationException($"Unable to get changes {block.Number}");
 
-        var contractAddress = usdtPluginConfiguration.TronUSDtLikeConfigurationItems[paymentMethodId].SmartContractAddress;
         return changes
-            .Where(t => !t.Log.Removed && TronUSDtAddressHelper.HexToBase58(t.Log.Address)
-                .Equals(contractAddress, StringComparison.InvariantCultureIgnoreCase))
+            .Where(t => !t.Log.Removed)
             .Select(t => new USDtTransferMatch(
                 TronUSDtAddressHelper.HexToBase58(t.Event.To).ToLowerInvariant(),
                 TronUSDtAddressHelper.HexToBase58(t.Event.From),
